@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wllama · Qwen3 Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface:  '#161b22',
+            surface2: '#21262d',
+            bd:       '#30363d',
+            muted:    '#8b949e',
+          },
+          animation: { blink: 'blink 0.8s step-end infinite' },
+          keyframes:  { blink: { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } } },
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar       { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+    .cursor {
+      display: inline-block;
+      width: 7px; height: 13px;
+      background: #7c3aed;
+      border-radius: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  </style>
+</head>
+<body class="bg-[#0d1117] text-[#e6edf3] flex flex-col h-dvh overflow-hidden text-sm font-sans">
+
+  <!-- ── Toolbar ────────────────────────────────────────────────── -->
+  <header class="bg-surface border-b border-bd px-4 py-2.5 flex items-center gap-2.5 flex-wrap shrink-0">
+
+    <span class="font-bold text-[15px] mr-auto whitespace-nowrap">
+      🦙 <span class="text-violet-500">wllama</span> · Qwen3 Chat
+    </span>
+
+    <select id="model-select"
+      class="bg-[#0d1117] text-[#e6edf3] border border-bd rounded-md px-3 py-1 text-[13px]
+             focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-40">
+      <option value="Qwen3-0.6B-Q4_K_M.gguf">Qwen3-0.6B — Q4_K_M (~450 MB)</option>
+      <option value="Qwen3-1.7B-Q4_K_M-00001-of-00003.gguf">Qwen3-1.7B — Q4_K_M (~1.1 GB · 3 shards)</option>
+      <option value="Qwen3-4B-Q4_K_M-00001-of-00005.gguf">Qwen3-4B — Q4_K_M (~2.5 GB · 5 shards)</option>
+    </select>
+
+    <button id="load-btn"
+      class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+             bg-violet-600 hover:bg-violet-700 border border-violet-800 text-white
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      Load Model
+    </button>
+
+    <!-- WebGPU toggle — shown by JS only when supported -->
+    <button id="gpu-btn" style="display:none"
+      class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+             border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      🚀 WebGPU: ON
+    </button>
+
+    <button id="stop-btn" style="display:none"
+      class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+             bg-red-600 hover:bg-red-700 text-white transition-colors">
+      ⏹ Stop
+    </button>
+
+    <button id="clear-chat-btn" disabled
+      class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+             border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      Clear Chat
+    </button>
+
+    <button id="clear-cache-btn"
+      class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+             border border-red-900/40 text-red-500 hover:bg-red-500/10
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      🗑 Clear Cache
+    </button>
+
+  </header>
+
+  <!-- ── Progress bar ───────────────────────────────────────────── -->
+  <div id="prog-wrap" class="h-0.5 bg-bd hidden shrink-0">
+    <div id="prog-bar" class="h-full bg-violet-500 transition-[width] duration-200 w-0"></div>
+  </div>
+
+  <!-- ── Status bar ─────────────────────────────────────────────── -->
+  <div id="status"
+    class="bg-surface border-b border-bd px-4 py-1.5 text-[12.5px] text-muted min-h-[26px] flex items-center shrink-0">
+    Select a model and click <b class="font-semibold mx-1">Load Model</b> to begin.
+  </div>
+
+  <!-- ── Chat pane ──────────────────────────────────────────────── -->
+  <main id="chat" class="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4">
+    <div id="empty" class="flex-1 flex flex-col items-center justify-center text-center text-muted gap-3 py-10">
+      <svg class="opacity-20" width="46" height="46" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <h2 class="text-[15px] font-semibold">No model loaded</h2>
+      <p class="text-[12.5px] max-w-sm leading-relaxed">
+        Pick a model and click <b>Load Model</b>.<br>
+        Models are cached in OPFS after the first download.
+      </p>
+    </div>
+  </main>
+
+  <!-- ── Input row ──────────────────────────────────────────────── -->
+  <footer class="border-t border-bd bg-surface px-4 py-3 flex items-end gap-2 shrink-0">
+    <textarea id="user-input" rows="1" disabled
+      placeholder="Message… (Enter = send · Shift+Enter = newline)"
+      class="flex-1 bg-[#0d1117] text-[#e6edf3] border border-bd rounded-lg px-3 py-2
+             text-[13.5px] leading-snug resize-none min-h-[38px] max-h-36 overflow-y-auto
+             focus:outline-none focus:border-violet-500 disabled:opacity-45
+             placeholder:text-muted transition-colors"></textarea>
+
+    <button id="send-btn" disabled title="Send (Enter)"
+      class="w-[38px] h-[38px] shrink-0 flex items-center justify-center rounded-lg
+             bg-violet-600 hover:bg-violet-700 text-white
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
