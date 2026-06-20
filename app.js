@@ -51,8 +51,7 @@ if (GPU_SUPPORTED) {
 function syncGpuBtn() {
   if (!GPU_SUPPORTED) return;
   if (gpuEnabled) {
-    const label = IS_FIREFOX ? '🟡 WebGPU: ON (compat)' : '🚀 WebGPU: ON';
-    $gpuBtn.textContent = label;
+    $gpuBtn.textContent = IS_FIREFOX ? '🟡 WebGPU: ON (compat)' : '🚀 WebGPU: ON';
     $gpuBtn.classList.remove('border-bd', 'text-muted');
     $gpuBtn.classList.add('border-violet-700', 'text-violet-400');
   } else {
@@ -155,8 +154,7 @@ async function loadModel() {
   // Called before loadModel — has no effect on Chromium.
   if (GPU_SUPPORTED && gpuEnabled && IS_FIREFOX) {
     wllama.setCompat('default', 'firefox_safari');
-  } else if (GPU_SUPPORTED) {
-    // Enable compat for Safari (mode defaults to 'safari' — no-op on Chrome)
+  } else if (GPU_SUPPORTED && gpuEnabled) {
     wllama.setCompat('default');
   }
 
@@ -177,6 +175,7 @@ async function loadModel() {
         // 99999 = offload all layers to GPU; 0 = CPU-only
         n_gpu_layers: GPU_SUPPORTED && gpuEnabled ? 99999 : 0,
         progressCallback({ loaded, total }) {
+          console.log('progress', loaded, total);
           const pct = total > 0 ? Math.round(loaded / total * 100) : 0;
           setProgress(pct);
           setStatus(
@@ -232,7 +231,7 @@ async function sendMessage() {
   $input.value = '';
   resizeInput();
 
-  history.push({ role: 'user', content: text + " /no_think" });
+  history.push({ role: 'user', content: text + ' /no_think' });
 
   appendBubble('user', toHtml(text));
   const $body = appendBubble('assistant', '<span class="cursor"></span>');
@@ -252,7 +251,8 @@ async function sendMessage() {
 
     for await (const chunk of iter) {
       reply += chunk.choices[0]?.delta?.content ?? '';
-      $body.innerHTML = esc(reply) + '<span class="cursor"></span>';
+      // FIX: use toHtml() during streaming so <think> blocks render correctly live
+      $body.innerHTML = toHtml(reply) + '<span class="cursor"></span>';
       $chat.scrollTop = $chat.scrollHeight;
     }
 
@@ -265,6 +265,8 @@ async function sendMessage() {
       $body.innerHTML =
         (reply ? toHtml(reply) : '<em class="opacity-50">…</em>') +
         '<br><em class="text-muted text-xs">(stopped)</em>';
+      // FIX: save partial reply to history so context isn't lost
+      if (reply) history.push({ role: 'assistant', content: reply });
     } else {
       $body.innerHTML = `<em class="text-red-400">Error: ${esc(err.message)}</em>`;
     }
@@ -291,15 +293,28 @@ async function clearCache() {
   }
 
   try {
+    const root = await navigator.storage.getDirectory();
+    for await (const name of root.keys()) {
+      try { await root.removeEntry(name, { recursive: true }); } catch (_) { }
+    }
+
     if ('caches' in window) {
       for (const key of await caches.keys()) await caches.delete(key);
     }
+
+    // FIX: properly await each IndexedDB deletion instead of fire-and-forget
     if ('indexedDB' in window) {
       const dbs = await indexedDB.databases();
-      for (const db of dbs) {
-        if (db.name?.match(/wllama|localforage/i)) indexedDB.deleteDatabase(db.name);
-      }
+      await Promise.all(
+        dbs
+          .filter(db => db.name?.match(/wllama|localforage/i))
+          .map(db => new Promise(res => {
+            const req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = req.onerror = res;
+          }))
+      );
     }
+
     setStatus('🗑 Cache cleared — models will re-download on next load.', 'ok');
     setTimeout(() => location.reload(), 1200);
   } catch (err) {
