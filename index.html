@@ -41,6 +41,17 @@
   <!-- ── Toolbar ────────────────────────────────────────────────── -->
   <header class="bg-surface border-b border-bd px-4 py-2.5 flex items-center gap-2.5 flex-wrap shrink-0">
 
+    <!-- Sidebar toggle -->
+    <button id="sidebar-toggle"
+      class="inline-flex items-center justify-center w-7 h-7 rounded-md border border-bd text-muted
+             hover:text-[#e6edf3] hover:border-muted transition-colors shrink-0"
+      title="Toggle chat history">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+
     <span class="font-bold text-[15px] mr-auto whitespace-nowrap">
       🦙 <span class="text-violet-500">wllama</span> · GGUF Chat
     </span>
@@ -89,7 +100,7 @@
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
              border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
              disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-      Clear Chat
+      New Chat
     </button>
 
     <button id="clear-cache-btn"
@@ -112,20 +123,41 @@
     Enter a HuggingFace model ID and click <b class="font-semibold mx-1">Detect</b> to find GGUF files.
   </div>
 
-  <!-- ── Chat pane ──────────────────────────────────────────────── -->
-  <main id="chat" class="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4">
-    <div id="empty" class="flex-1 flex flex-col items-center justify-center text-center text-muted gap-3 py-10">
-      <svg class="opacity-20" width="46" height="46" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-      <h2 class="text-[15px] font-semibold">No model loaded</h2>
-      <p class="text-[12.5px] max-w-sm leading-relaxed">
-        Paste a HuggingFace model ID like <code class="bg-surface2 px-2 py-1 rounded text-violet-300">meta-llama/Llama-2-7b-hf</code><br>
-        The app will auto-detect GGUF files and let you choose one to load.
-      </p>
-    </div>
-  </main>
+  <!-- ── Body (sidebar + chat) ──────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────── -->
+    <aside id="sidebar"
+      class="w-56 shrink-0 bg-surface border-r border-bd flex flex-col overflow-hidden transition-all duration-200">
+      <div class="px-3 py-2.5 flex items-center justify-between border-b border-bd shrink-0">
+        <span class="text-[12px] font-semibold text-muted uppercase tracking-wider">Saved Chats</span>
+        <button id="new-chat-btn"
+          class="text-[11px] px-2 py-0.5 rounded border border-bd text-muted hover:text-[#e6edf3]
+                 hover:border-muted transition-colors whitespace-nowrap">
+          + New
+        </button>
+      </div>
+      <ul id="chat-list" class="flex-1 overflow-y-auto py-1">
+        <!-- populated by JS -->
+      </ul>
+    </aside>
+
+    <!-- ── Chat pane ────────────────────────────────────────────── -->
+    <main id="chat" class="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4">
+      <div id="empty" class="flex-1 flex flex-col items-center justify-center text-center text-muted gap-3 py-10">
+        <svg class="opacity-20" width="46" height="46" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <h2 class="text-[15px] font-semibold">No model loaded</h2>
+        <p class="text-[12.5px] max-w-sm leading-relaxed">
+          Paste a HuggingFace model ID like <code class="bg-surface2 px-2 py-1 rounded text-violet-300">meta-llama/Llama-2-7b-hf</code><br>
+          The app will auto-detect GGUF files and let you choose one to load.
+        </p>
+      </div>
+    </main>
+
+  </div>
 
   <!-- ── Input row ──────────────────────────────────────────────── -->
   <footer class="border-t border-bd bg-surface px-4 py-3 flex items-end gap-2 shrink-0">

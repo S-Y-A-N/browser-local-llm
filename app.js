@@ -5,25 +5,29 @@ const CONFIG_PATHS = {
   'default': 'https://unpkg.com/@wllama/wllama/esm/wasm/wllama.wasm',
 };
 
-let HF_REPO = 'unsloth/gemma-3-1b-it-GGUF';
+let HF_REPO = 'asubah/Qwen3-GGUF';
 
 // ─── DOM refs ─────────────────────────────────────────────────────
-const $repoInput   = document.getElementById('model-repo-input');
-const $detectBtn   = document.getElementById('detect-btn');
-const $sel         = document.getElementById('model-select');
-const $selWrap     = document.getElementById('model-select-wrap');
-const $loadBtn     = document.getElementById('load-btn');
-const $gpuBtn      = document.getElementById('gpu-btn');
-const $stopBtn     = document.getElementById('stop-btn');
-const $clearChat   = document.getElementById('clear-chat-btn');
-const $clearCache  = document.getElementById('clear-cache-btn');
-const $chat        = document.getElementById('chat');
-const $empty       = document.getElementById('empty');
-const $input       = document.getElementById('user-input');
-const $sendBtn     = document.getElementById('send-btn');
-const $status      = document.getElementById('status');
-const $progWrap    = document.getElementById('prog-wrap');
-const $progBar     = document.getElementById('prog-bar');
+const $repoInput      = document.getElementById('model-repo-input');
+const $detectBtn      = document.getElementById('detect-btn');
+const $sel            = document.getElementById('model-select');
+const $selWrap        = document.getElementById('model-select-wrap');
+const $loadBtn        = document.getElementById('load-btn');
+const $gpuBtn         = document.getElementById('gpu-btn');
+const $stopBtn        = document.getElementById('stop-btn');
+const $clearChat      = document.getElementById('clear-chat-btn');
+const $clearCache     = document.getElementById('clear-cache-btn');
+const $chat           = document.getElementById('chat');
+const $empty          = document.getElementById('empty');
+const $input          = document.getElementById('user-input');
+const $sendBtn        = document.getElementById('send-btn');
+const $status         = document.getElementById('status');
+const $progWrap       = document.getElementById('prog-wrap');
+const $progBar        = document.getElementById('prog-bar');
+const $sidebar        = document.getElementById('sidebar');
+const $chatList       = document.getElementById('chat-list');
+const $sidebarToggle  = document.getElementById('sidebar-toggle');
+const $newChatBtn     = document.getElementById('new-chat-btn');
 
 // ─── App state ────────────────────────────────────────────────────
 let wllama       = null;
@@ -162,8 +166,165 @@ function setGenerating(on) {
   $gpuBtn.disabled       = on;
 }
 
+// ─── Saved chats (localStorage) ───────────────────────────────────
+// Schema: { id, title, model: { repo, file }, messages: [{role,content}], updatedAt }
+
+const STORAGE_KEY = 'wllama_chats';
+
+let activeChatId = null; // id of the currently open saved chat, or null for unsaved
+
+function loadAllChats() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch (_) { return []; }
+}
+
+function saveAllChats(chats) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+}
+
+function upsertChat(id, patch) {
+  const chats = loadAllChats();
+  const idx   = chats.findIndex(c => c.id === id);
+  if (idx >= 0) {
+    chats[idx] = { ...chats[idx], ...patch, updatedAt: Date.now() };
+  } else {
+    chats.unshift({ id, ...patch, updatedAt: Date.now() });
+  }
+  saveAllChats(chats);
+  renderChatList();
+}
+
+function deleteChat(id) {
+  const chats = loadAllChats().filter(c => c.id !== id);
+  saveAllChats(chats);
+  if (activeChatId === id) {
+    activeChatId = null;
+    history = [];
+    wipeMessages();
+    setStatus('Chat deleted.');
+  }
+  renderChatList();
+}
+
+function renderChatList() {
+  const chats = loadAllChats();
+  $chatList.innerHTML = '';
+
+  if (chats.length === 0) {
+    $chatList.innerHTML =
+      '<li class="px-3 py-3 text-[12px] text-muted italic">No saved chats yet.</li>';
+    return;
+  }
+
+  chats.forEach(chat => {
+    const isActive = chat.id === activeChatId;
+    const li = document.createElement('li');
+    li.className =
+      `group flex items-start gap-1.5 px-2.5 py-2 cursor-pointer rounded-md mx-1 my-0.5
+       hover:bg-surface2 transition-colors ${isActive ? 'bg-surface2 ring-1 ring-violet-700/40' : ''}`;
+
+    li.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="text-[12.5px] font-medium truncate leading-snug">${esc(chat.title)}</div>
+        <div class="text-[11px] text-muted truncate mt-0.5" title="${esc(chat.model.file)}">${esc(chat.model.file)}</div>
+      </div>
+      <button class="del-btn shrink-0 opacity-0 group-hover:opacity-100 text-muted hover:text-red-400
+                     transition-opacity mt-0.5 leading-none text-[14px]" title="Delete chat">×</button>`;
+
+    li.addEventListener('click', () => openSavedChat(chat.id));
+    li.querySelector('.del-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      if (confirm('Delete this chat?')) deleteChat(chat.id);
+    });
+
+    $chatList.appendChild(li);
+  });
+}
+
+// Save current in-progress chat (called after each assistant reply)
+function persistCurrentChat() {
+  if (history.length === 0) return;
+  if (!isLoaded) return;
+
+  const file = $sel.value;
+  const repo = HF_REPO;
+  if (!file) return;
+
+  // derive title from first user message
+  const firstUser = history.find(m => m.role === 'user');
+  const rawTitle  = firstUser ? firstUser.content.replace(/ \/no_think$/, '') : 'Chat';
+  const title     = rawTitle.length > 48 ? rawTitle.slice(0, 48) + '…' : rawTitle;
+
+  if (!activeChatId) activeChatId = `chat_${Date.now()}`;
+
+  upsertChat(activeChatId, {
+    title,
+    model: { repo, file },
+    messages: history,
+  });
+}
+
+// Restore a saved chat into the UI (read-only replay — no model needed)
+async function openSavedChat(id) {
+  if (isGenerating) return;
+
+  const chats = loadAllChats();
+  const chat  = chats.find(c => c.id === id);
+  if (!chat) return;
+
+  // Switch active id and repaint list
+  activeChatId = id;
+  renderChatList();
+
+  // Restore history
+  history = chat.messages;
+
+  // Render messages
+  wipeMessages();
+  for (const msg of history) {
+    // Strip /no_think suffix from displayed user messages
+    const display = msg.role === 'user'
+      ? msg.content.replace(/ \/no_think$/, '')
+      : msg.content;
+    appendBubble(msg.role, toHtml(display));
+  }
+
+  // Pre-select the model in the toolbar
+  const { repo, file } = chat.model;
+  if ($repoInput.value.trim() !== repo) {
+    $repoInput.value = repo;
+    // Re-detect so the select is populated, then pick the right file
+    await detectGGUFFiles(file);
+  } else if ($selWrap.style.display !== 'none') {
+    // Select already populated — just pick the right option
+    selectModelFile(file);
+  } else {
+    await detectGGUFFiles(file);
+  }
+
+  setStatus(
+    `Viewing saved chat · model: <b>${esc(file)}</b> — click <b>Load Model</b> to continue chatting.`,
+    'ok'
+  );
+}
+
+// Helper: select a specific file in the dropdown (if present)
+function selectModelFile(file) {
+  for (const opt of $sel.options) {
+    if (opt.value === file) { $sel.value = file; return true; }
+  }
+  return false;
+}
+
+// ─── Sidebar toggle ───────────────────────────────────────────────
+$sidebarToggle.addEventListener('click', () => {
+  const hidden = $sidebar.classList.toggle('hidden');
+  $sidebarToggle.setAttribute('aria-pressed', String(!hidden));
+});
+
 // ─── Detect GGUF files from HF repo ───────────────────────────────
-async function detectGGUFFiles() {
+// Optional `preselectFile` arg: after populating the select, try to pick that file.
+async function detectGGUFFiles(preselectFile = null) {
   const repo = $repoInput.value.trim();
   if (!repo) {
     setStatus('⚠️ Enter a HuggingFace model ID (e.g., meta-llama/Llama-2-7b-hf)', 'busy');
@@ -236,6 +397,10 @@ async function detectGGUFFiles() {
 
     $selWrap.style.display = 'block';
     $loadBtn.disabled = false;
+
+    // Pre-select a specific file if requested (e.g. when restoring a saved chat)
+    if (preselectFile) selectModelFile(preselectFile);
+
     setStatus(`✓ Found ${ggufFiles.length} GGUF file(s) · Select a model and click Load`, 'ok');
 
   } catch (err) {
@@ -266,8 +431,11 @@ async function loadModel() {
     isLoaded = false;
   }
 
-  history = [];
-  wipeMessages();
+  // Only wipe messages if this is a fresh load (not restoring a saved chat)
+  if (activeChatId === null) {
+    history = [];
+    wipeMessages();
+  }
 
   wllama = new Wllama(CONFIG_PATHS, { parallelDownloads: 5 });
 
@@ -322,7 +490,6 @@ async function loadModel() {
     console.log('File:', file);
     console.log('Repo:', HF_REPO);
     try {
-      // wllama exposes the underlying gguf context — log whatever is public
       console.log('wllama instance keys:', Object.keys(wllama));
       if (typeof wllama.getModelMetadata === 'function') {
         const meta = await wllama.getModelMetadata();
@@ -396,6 +563,7 @@ async function sendMessage() {
 
     $body.innerHTML = toHtml(reply);
     history.push({ role: 'assistant', content: reply });
+    persistCurrentChat();
 
   } catch (err) {
     const aborted = err.name === 'AbortError' || abortCtrl.signal.aborted;
@@ -403,7 +571,10 @@ async function sendMessage() {
       $body.innerHTML =
         (reply ? toHtml(reply) : '<em class="opacity-50">…</em>') +
         '<br><em class="text-muted text-xs">(stopped)</em>';
-      if (reply) history.push({ role: 'assistant', content: reply });
+      if (reply) {
+        history.push({ role: 'assistant', content: reply });
+        persistCurrentChat();
+      }
     } else {
       $body.innerHTML = `<em class="text-red-400">Error: ${esc(err.message)}</em>`;
     }
@@ -411,6 +582,17 @@ async function sendMessage() {
     setGenerating(false);
     $input.focus();
   }
+}
+
+// ─── New chat ─────────────────────────────────────────────────────
+function newChat() {
+  if (isGenerating) return;
+  activeChatId = null;
+  history = [];
+  wipeMessages();
+  renderChatList();
+  setStatus('New chat started.');
+  if (isLoaded) $input.focus();
 }
 
 // ─── Clear cache ──────────────────────────────────────────────────
@@ -468,14 +650,15 @@ function resizeInput() {
 }
 
 // ─── Event wiring ─────────────────────────────────────────────────
-$detectBtn .addEventListener('click',   detectGGUFFiles);
+$detectBtn .addEventListener('click',   () => detectGGUFFiles());
 $repoInput .addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); detectGGUFFiles(); }
 });
 $loadBtn   .addEventListener('click',   loadModel);
 $gpuBtn    .addEventListener('click',   toggleGpu);
 $stopBtn   .addEventListener('click',   () => abortCtrl?.abort());
-$clearChat .addEventListener('click',   () => { history = []; wipeMessages(); setStatus('Chat history cleared.'); });
+$clearChat .addEventListener('click',   newChat);
+$newChatBtn.addEventListener('click',   newChat);
 $clearCache.addEventListener('click',   clearCache);
 $sendBtn   .addEventListener('click',   sendMessage);
 $input     .addEventListener('input',   resizeInput);
@@ -483,6 +666,7 @@ $input     .addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-// ─── Initialize with default repo ─────────────────────────────────
+// ─── Initialize ───────────────────────────────────────────────────
 $repoInput.value = HF_REPO;
+renderChatList();
 detectGGUFFiles();
