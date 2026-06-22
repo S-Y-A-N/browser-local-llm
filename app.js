@@ -35,6 +35,7 @@ let isLoaded     = false;
 let isGenerating = false;
 let history      = [];
 let abortCtrl    = null;
+let cachedFiles  = new Set(); // filenames known to be in OPFS cache
 
 // ─── WebGPU state ─────────────────────────────────────────────────
 const GPU_SUPPORTED = (() => {
@@ -322,6 +323,22 @@ $sidebarToggle.addEventListener('click', () => {
   $sidebarToggle.setAttribute('aria-pressed', String(!hidden));
 });
 
+// ─── Cache presence check ─────────────────────────────────────────
+async function loadCachedFiles() {
+  try {
+    const tmp = new Wllama(CONFIG_PATHS);
+    const entries = await tmp.cacheManager.list();
+    // name format: {hash}_{filename}.gguf — strip the hash prefix
+    cachedFiles = new Set(
+      entries.map(e => e.name?.replace(/^[0-9a-f]+_/, '') ?? '').filter(Boolean)
+    );
+    console.log('[cache] cached filenames:', [...cachedFiles]);
+  } catch (err) {
+    console.error('[cache] loadCachedFiles failed:', err);
+    cachedFiles = new Set();
+  }
+}
+
 // ─── Detect GGUF files from HF repo ───────────────────────────────
 // Optional `preselectFile` arg: after populating the select, try to pick that file.
 async function detectGGUFFiles(preselectFile = null) {
@@ -398,6 +415,9 @@ async function detectGGUFFiles(preselectFile = null) {
     $selWrap.style.display = 'block';
     $loadBtn.disabled = false;
 
+    // Mark cached options with a checkmark
+    markCachedOptions();
+
     // Pre-select a specific file if requested (e.g. when restoring a saved chat)
     if (preselectFile) selectModelFile(preselectFile);
 
@@ -409,6 +429,17 @@ async function detectGGUFFiles(preselectFile = null) {
     $loadBtn.disabled = true;
   } finally {
     $detectBtn.disabled = false;
+  }
+}
+
+// ─── Mark cached options in the dropdown ──────────────────────────
+function markCachedOptions() {
+  for (const opt of $sel.options) {
+    const file = opt.value;
+    const isCached = cachedFiles.has(file);
+    // Strip any existing prefix before re-applying
+    opt.textContent = opt.textContent.replace(/^✓ /, '');
+    if (isCached) opt.textContent = '✓ ' + opt.textContent;
   }
 }
 
@@ -481,6 +512,10 @@ async function loadModel() {
     $clearChat.disabled  = false;
     $loadBtn.textContent = '↺ Reload';
     setStatus(`✓ <b>${file}</b> ready · ${backendLabel}`, 'ok');
+
+    // File is now cached — refresh the set and re-mark the dropdown
+    await loadCachedFiles();
+    markCachedOptions();
 
     console.group('[wllama] Model load result');
     console.log('WebGPU supported (isSupportWebGPU):', GPU_SUPPORTED);
@@ -635,6 +670,8 @@ async function clearCache() {
 
     history = [];
     wipeMessages();
+    cachedFiles = new Set();
+    markCachedOptions();
     setStatus('🗑 Cache cleared — click <b>Load Model</b> to re-download.', 'ok');
   } catch (err) {
     setStatus(`✗ Cache clear failed: ${esc(err.message)}`, 'err');
@@ -669,4 +706,4 @@ $input     .addEventListener('keydown', e => {
 // ─── Initialize ───────────────────────────────────────────────────
 $repoInput.value = HF_REPO;
 renderChatList();
-detectGGUFFiles();
+loadCachedFiles().then(() => detectGGUFFiles());
