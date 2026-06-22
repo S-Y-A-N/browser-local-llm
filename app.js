@@ -167,6 +167,10 @@ async function detectGGUFFiles() {
 
     HF_REPO = repo;
 
+    // Build a size map from siblings data
+    const sizeMap = new Map();
+    ggufFiles.forEach(f => { sizeMap.set(f.rfilename, f.size || 0); });
+
     // Group by base name (handle shards)
     const models = new Map();
     ggufFiles.forEach(f => {
@@ -181,11 +185,14 @@ async function detectGGUFFiles() {
     $sel.innerHTML = '';
     const sorted = Array.from(models.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     sorted.forEach(([baseName, files]) => {
-      const totalSize = files.length * 500; // rough estimate in MB
+      const totalBytes = files.reduce((sum, f) => sum + (sizeMap.get(f) || 0), 0);
       const shardInfo = files.length > 1 ? ` (${files.length} shards)` : '';
+      const sizeLabel = totalBytes > 0
+        ? ` ~${(totalBytes / 1024 ** 3).toFixed(2)} GB`
+        : '';
       const option = document.createElement('option');
       option.value = files[0]; // first shard filename
-      option.textContent = `${baseName}${shardInfo} ~${Math.round(totalSize / 1024)}GB`;
+      option.textContent = `${baseName}${shardInfo}${sizeLabel}`;
       $sel.appendChild(option);
     });
 
@@ -245,13 +252,16 @@ async function loadModel() {
     await wllama.loadModelFromHF(
       { repo: HF_REPO, file },
       {
-        n_ctx: 4096,
+        n_ctx: 2048,
         n_gpu_layers: GPU_SUPPORTED && gpuEnabled ? 99999 : 0,
         progressCallback({ loaded, total }) {
           const pct = total > 0 ? Math.round(loaded / total * 100) : 0;
+          const loadedGB = (loaded / 1024 ** 3).toFixed(2);
+          const totalGB  = total > 0 ? (total / 1024 ** 3).toFixed(2) : '?';
+          const byteInfo = total > 0 ? ` (${loadedGB} GB / ${totalGB} GB)` : '';
           setProgress(pct);
           setStatus(
-            `⌛ Downloading <b>${file}</b>… ${pct}% <span class="opacity-60">${backendLabel}</span>`,
+            `⌛ Downloading <b>${file}</b>… ${pct}%${byteInfo} <span class="opacity-60">${backendLabel}</span>`,
             'busy'
           );
         },
@@ -383,8 +393,9 @@ async function clearCache() {
       );
     }
 
-    setStatus('🗑 Cache cleared — models will re-download on next load.', 'ok');
-    setTimeout(() => location.reload(), 1200);
+    history = [];
+    wipeMessages();
+    setStatus('🗑 Cache cleared — click <b>Load Model</b> to re-download.', 'ok');
   } catch (err) {
     setStatus(`✗ Cache clear failed: ${esc(err.message)}`, 'err');
   } finally {
