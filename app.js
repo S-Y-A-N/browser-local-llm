@@ -5,7 +5,7 @@ const CONFIG_PATHS = {
   'default': 'https://unpkg.com/@wllama/wllama/esm/wasm/wllama.wasm',
 };
 
-let HF_REPO = 'asubah/Qwen3-GGUF';
+let HF_REPO = 'unsloth/gemma-3-1b-it-GGUF';
 
 // ─── DOM refs ─────────────────────────────────────────────────────
 const $repoInput   = document.getElementById('model-repo-input');
@@ -36,6 +36,38 @@ let abortCtrl    = null;
 const GPU_SUPPORTED = (() => {
   try { return new Wllama(CONFIG_PATHS).isSupportWebGPU(); }
   catch (_) { return false; }
+})();
+
+// Deep WebGPU diagnostics at startup
+(async () => {
+  console.group('[wllama] WebGPU startup diagnostics');
+  console.log('navigator.gpu present:', !!navigator.gpu);
+  if (navigator.gpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      if (adapter) {
+        // adapter.info is the current API; requestAdapterInfo() was removed in Chrome 121+
+        const info = adapter.info ?? {};
+        console.log('Adapter vendor:',       info.vendor      ?? '(unknown)');
+        console.log('Adapter device:',       info.device      ?? '(unknown)');
+        console.log('Adapter description:',  info.description ?? '(unknown)');
+        console.log('Adapter architecture:', info.architecture ?? '(unknown)');
+        console.log('Adapter backend:',      info.backend     ?? '(unknown)');
+        const device = await adapter.requestDevice();
+        console.log('Device obtained:', !!device);
+        console.log('Device limits (maxBufferSize):', device.limits.maxBufferSize);
+        device.destroy();
+      } else {
+        console.warn('requestAdapter() returned null — GPU may be blocked or unavailable');
+      }
+    } catch (e) {
+      console.error('WebGPU adapter/device request failed:', e);
+    }
+  } else {
+    console.warn('navigator.gpu is undefined — WebGPU not exposed in this context');
+  }
+  console.log('wllama isSupportWebGPU():', GPU_SUPPORTED);
+  console.groupEnd();
 })();
 
 const IS_FIREFOX = navigator.userAgent.toLowerCase().includes('firefox');
@@ -167,9 +199,15 @@ async function detectGGUFFiles() {
 
     HF_REPO = repo;
 
-    // Build a size map from siblings data
+    // Fetch file sizes from the tree API (siblings endpoint doesn't include size)
     const sizeMap = new Map();
-    ggufFiles.forEach(f => { sizeMap.set(f.rfilename, f.size || 0); });
+    try {
+      const treeRes = await fetch(`https://huggingface.co/api/models/${repo}/tree/main`);
+      if (treeRes.ok) {
+        const treeData = await treeRes.json();
+        treeData.forEach(f => { if (f.size) sizeMap.set(f.path, f.size); });
+      }
+    } catch (_) { /* size labels will be omitted if this fails */ }
 
     // Group by base name (handle shards)
     const models = new Map();
@@ -252,7 +290,7 @@ async function loadModel() {
     await wllama.loadModelFromHF(
       { repo: HF_REPO, file },
       {
-        n_ctx: 2048,
+        n_ctx: 4096,
         n_gpu_layers: GPU_SUPPORTED && gpuEnabled ? 99999 : 0,
         progressCallback({ loaded, total }) {
           const pct = total > 0 ? Math.round(loaded / total * 100) : 0;
@@ -275,6 +313,26 @@ async function loadModel() {
     $clearChat.disabled  = false;
     $loadBtn.textContent = '↺ Reload';
     setStatus(`✓ <b>${file}</b> ready · ${backendLabel}`, 'ok');
+
+    console.group('[wllama] Model load result');
+    console.log('WebGPU supported (isSupportWebGPU):', GPU_SUPPORTED);
+    console.log('WebGPU enabled (toggle):', GPU_SUPPORTED && gpuEnabled);
+    console.log('Backend label:', backendLabel);
+    console.log('n_gpu_layers requested:', GPU_SUPPORTED && gpuEnabled ? 99999 : 0);
+    console.log('File:', file);
+    console.log('Repo:', HF_REPO);
+    try {
+      // wllama exposes the underlying gguf context — log whatever is public
+      console.log('wllama instance keys:', Object.keys(wllama));
+      if (typeof wllama.getModelMetadata === 'function') {
+        const meta = await wllama.getModelMetadata();
+        console.log('Model metadata:', meta);
+      }
+    } catch (e) {
+      console.warn('Could not read wllama internals:', e);
+    }
+    console.groupEnd();
+
     $input.focus();
 
   } catch (err) {
