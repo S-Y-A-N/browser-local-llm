@@ -5,22 +5,25 @@ const CONFIG_PATHS = {
   'default': 'https://unpkg.com/@wllama/wllama/esm/wasm/wllama.wasm',
 };
 
-const HF_REPO = 'asubah/Qwen3-GGUF';
+let HF_REPO = 'asubah/Qwen3-GGUF';
 
 // ─── DOM refs ─────────────────────────────────────────────────────
-const $sel        = document.getElementById('model-select');
-const $loadBtn    = document.getElementById('load-btn');
-const $gpuBtn     = document.getElementById('gpu-btn');
-const $stopBtn    = document.getElementById('stop-btn');
-const $clearChat  = document.getElementById('clear-chat-btn');
-const $clearCache = document.getElementById('clear-cache-btn');
-const $chat       = document.getElementById('chat');
-const $empty      = document.getElementById('empty');
-const $input      = document.getElementById('user-input');
-const $sendBtn    = document.getElementById('send-btn');
-const $status     = document.getElementById('status');
-const $progWrap   = document.getElementById('prog-wrap');
-const $progBar    = document.getElementById('prog-bar');
+const $repoInput   = document.getElementById('model-repo-input');
+const $detectBtn   = document.getElementById('detect-btn');
+const $sel         = document.getElementById('model-select');
+const $selWrap     = document.getElementById('model-select-wrap');
+const $loadBtn     = document.getElementById('load-btn');
+const $gpuBtn      = document.getElementById('gpu-btn');
+const $stopBtn     = document.getElementById('stop-btn');
+const $clearChat   = document.getElementById('clear-chat-btn');
+const $clearCache  = document.getElementById('clear-cache-btn');
+const $chat        = document.getElementById('chat');
+const $empty       = document.getElementById('empty');
+const $input       = document.getElementById('user-input');
+const $sendBtn     = document.getElementById('send-btn');
+const $status      = document.getElementById('status');
+const $progWrap    = document.getElementById('prog-wrap');
+const $progBar     = document.getElementById('prog-bar');
 
 // ─── App state ────────────────────────────────────────────────────
 let wllama       = null;
@@ -30,8 +33,6 @@ let history      = [];
 let abortCtrl    = null;
 
 // ─── WebGPU state ─────────────────────────────────────────────────
-// Probe support once at startup using a throw-away Wllama instance.
-// isSupportWebGPU() only reads navigator.gpu — no side effects.
 const GPU_SUPPORTED = (() => {
   try { return new Wllama(CONFIG_PATHS).isSupportWebGPU(); }
   catch (_) { return false; }
@@ -39,10 +40,8 @@ const GPU_SUPPORTED = (() => {
 
 const IS_FIREFOX = navigator.userAgent.toLowerCase().includes('firefox');
 
-// gpuEnabled tracks the user's current preference (default ON if supported)
 let gpuEnabled = GPU_SUPPORTED;
 
-// Show the toggle only when the browser actually supports WebGPU
 if (GPU_SUPPORTED) {
   $gpuBtn.style.display = 'inline-flex';
   syncGpuBtn();
@@ -128,15 +127,92 @@ function setGenerating(on) {
   $stopBtn.style.display = on ? 'inline-flex' : 'none';
   $sendBtn.disabled      = on;
   $input.disabled        = on;
-  // Disable toggle while generating — changing it mid-session would desync
   $gpuBtn.disabled       = on;
+}
+
+// ─── Detect GGUF files from HF repo ───────────────────────────────
+async function detectGGUFFiles() {
+  const repo = $repoInput.value.trim();
+  if (!repo) {
+    setStatus('⚠️ Enter a HuggingFace model ID (e.g., meta-llama/Llama-2-7b-hf)', 'busy');
+    return;
+  }
+
+  $detectBtn.disabled = true;
+  setStatus(`⏳ Scanning ${repo} for GGUF files…`, 'busy');
+
+  try {
+    const apiUrl = `https://huggingface.co/api/models/${repo}`;
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error('Model not found or not accessible');
+
+    const modelData = await response.json();
+    const siblings = modelData.siblings || [];
+
+    // Filter GGUF files
+    const ggufFiles = siblings.filter(f => f.rfilename.endsWith('.gguf'));
+
+    if (ggufFiles.length === 0) {
+      setStatus(
+        `✗ No GGUF files found in ${repo}. ` +
+        `<span class="text-[11px] block mt-1 text-muted">💡 Convert this model using ` +
+        `<a href="https://github.com/ggml-org/llama.cpp" target="_blank" class="text-violet-400 hover:underline">llama.cpp</a> ` +
+        `or use a repo with pre-converted GGUF files.</span>`,
+        'err'
+      );
+      $selWrap.style.display = 'none';
+      $loadBtn.disabled = true;
+      return;
+    }
+
+    HF_REPO = repo;
+
+    // Group by base name (handle shards)
+    const models = new Map();
+    ggufFiles.forEach(f => {
+      const name = f.rfilename;
+      const match = name.match(/^(.+?)-\d+-of-\d+\.gguf$/);
+      const baseName = match ? match[1] : name.replace('.gguf', '');
+      if (!models.has(baseName)) models.set(baseName, []);
+      models.get(baseName).push(name);
+    });
+
+    // Populate select
+    $sel.innerHTML = '';
+    const sorted = Array.from(models.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    sorted.forEach(([baseName, files]) => {
+      const totalSize = files.length * 500; // rough estimate in MB
+      const shardInfo = files.length > 1 ? ` (${files.length} shards)` : '';
+      const option = document.createElement('option');
+      option.value = files[0]; // first shard filename
+      option.textContent = `${baseName}${shardInfo} ~${Math.round(totalSize / 1024)}GB`;
+      $sel.appendChild(option);
+    });
+
+    $selWrap.style.display = 'block';
+    $loadBtn.disabled = false;
+    setStatus(`✓ Found ${ggufFiles.length} GGUF file(s) · Select a model and click Load`, 'ok');
+
+  } catch (err) {
+    setStatus(`✗ Detection failed: ${esc(err.message)}`, 'err');
+    $selWrap.style.display = 'none';
+    $loadBtn.disabled = true;
+  } finally {
+    $detectBtn.disabled = false;
+  }
 }
 
 // ─── Load model ───────────────────────────────────────────────────
 async function loadModel() {
   const file = $sel.value;
+  if (!file) {
+    setStatus('Select a model first', 'err');
+    return;
+  }
+
   $loadBtn.disabled = true;
   $gpuBtn.disabled  = true;
+  $detectBtn.disabled = true;
   $sel.disabled     = true;
 
   if (wllama) {
@@ -150,8 +226,6 @@ async function loadModel() {
 
   wllama = new Wllama(CONFIG_PATHS, { parallelDownloads: 5 });
 
-  // Apply Firefox compat so Safari/Firefox can use WebGPU via Asyncify.
-  // Called before loadModel — has no effect on Chromium.
   if (GPU_SUPPORTED && gpuEnabled && IS_FIREFOX) {
     wllama.setCompat('default', 'firefox_safari');
   } else if (GPU_SUPPORTED && gpuEnabled) {
@@ -172,10 +246,8 @@ async function loadModel() {
       { repo: HF_REPO, file },
       {
         n_ctx: 4096,
-        // 99999 = offload all layers to GPU; 0 = CPU-only
         n_gpu_layers: GPU_SUPPORTED && gpuEnabled ? 99999 : 0,
         progressCallback({ loaded, total }) {
-          console.log('progress', loaded, total);
           const pct = total > 0 ? Math.round(loaded / total * 100) : 0;
           setProgress(pct);
           setStatus(
@@ -201,6 +273,7 @@ async function loadModel() {
   } finally {
     $loadBtn.disabled = false;
     $gpuBtn.disabled  = false;
+    $detectBtn.disabled = false;
     $sel.disabled     = false;
   }
 }
@@ -211,8 +284,6 @@ function toggleGpu() {
   gpuEnabled = !gpuEnabled;
   syncGpuBtn();
 
-  // If a model is already loaded, prompt user to reload to apply the change.
-  // We don't auto-reload because it would discard chat history without warning.
   if (isLoaded) {
     setStatus(
       `⚠️ Backend changed to <b>${gpuEnabled ? 'WebGPU' : 'CPU'}</b> — ` +
@@ -251,7 +322,6 @@ async function sendMessage() {
 
     for await (const chunk of iter) {
       reply += chunk.choices[0]?.delta?.content ?? '';
-      // FIX: use toHtml() during streaming so <think> blocks render correctly live
       $body.innerHTML = toHtml(reply) + '<span class="cursor"></span>';
       $chat.scrollTop = $chat.scrollHeight;
     }
@@ -265,7 +335,6 @@ async function sendMessage() {
       $body.innerHTML =
         (reply ? toHtml(reply) : '<em class="opacity-50">…</em>') +
         '<br><em class="text-muted text-xs">(stopped)</em>';
-      // FIX: save partial reply to history so context isn't lost
       if (reply) history.push({ role: 'assistant', content: reply });
     } else {
       $body.innerHTML = `<em class="text-red-400">Error: ${esc(err.message)}</em>`;
@@ -302,7 +371,6 @@ async function clearCache() {
       for (const key of await caches.keys()) await caches.delete(key);
     }
 
-    // FIX: properly await each IndexedDB deletion instead of fire-and-forget
     if ('indexedDB' in window) {
       const dbs = await indexedDB.databases();
       await Promise.all(
@@ -331,6 +399,10 @@ function resizeInput() {
 }
 
 // ─── Event wiring ─────────────────────────────────────────────────
+$detectBtn .addEventListener('click',   detectGGUFFiles);
+$repoInput .addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); detectGGUFFiles(); }
+});
 $loadBtn   .addEventListener('click',   loadModel);
 $gpuBtn    .addEventListener('click',   toggleGpu);
 $stopBtn   .addEventListener('click',   () => abortCtrl?.abort());
@@ -341,3 +413,7 @@ $input     .addEventListener('input',   resizeInput);
 $input     .addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
+
+// ─── Initialize with default repo ─────────────────────────────────
+$repoInput.value = HF_REPO;
+detectGGUFFiles();

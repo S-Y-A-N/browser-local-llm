@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Wllama · Qwen3 Chat</title>
+  <title>Wllama · GGUF Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -42,49 +42,60 @@
   <header class="bg-surface border-b border-bd px-4 py-2.5 flex items-center gap-2.5 flex-wrap shrink-0">
 
     <span class="font-bold text-[15px] mr-auto whitespace-nowrap">
-      🦙 <span class="text-violet-500">wllama</span> · Qwen3 Chat
+      🦙 <span class="text-violet-500">wllama</span> · GGUF Chat
     </span>
 
-    <select id="model-select"
+    <input id="model-repo-input" type="text" placeholder="HuggingFace model ID (e.g., meta-llama/Llama-2-7b-hf)"
       class="bg-[#0d1117] text-[#e6edf3] border border-bd rounded-md px-3 py-1 text-[13px]
-             focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-40">
-      <option value="Qwen3-0.6B-Q4_K_M.gguf">Qwen3-0.6B — Q4_K_M (~450 MB)</option>
-      <option value="Qwen3-1.7B-Q4_K_M-00001-of-00003.gguf">Qwen3-1.7B — Q4_K_M (~1.1 GB · 3 shards)</option>
-      <option value="Qwen3-4B-Q4_K_M-00001-of-00005.gguf">Qwen3-4B — Q4_K_M (~2.5 GB · 5 shards)</option>
-    </select>
+             focus:outline-none focus:border-violet-500 min-w-[300px]
+             disabled:opacity-40" />
 
-    <button id="load-btn"
+    <button id="detect-btn"
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
              bg-violet-600 hover:bg-violet-700 border border-violet-800 text-white
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-      Load Model
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+      🔍 Detect
     </button>
+
+    <div id="model-select-wrap" style="display:none" class="flex gap-2.5 items-center">
+      <select id="model-select"
+        class="bg-[#0d1117] text-[#e6edf3] border border-bd rounded-md px-3 py-1 text-[13px]
+               focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-40">
+      </select>
+
+      <button id="load-btn"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
+               bg-violet-600 hover:bg-violet-700 border border-violet-800 text-white
+               disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+        Load Model
+      </button>
+    </div>
 
     <!-- WebGPU toggle — shown by JS only when supported -->
     <button id="gpu-btn" style="display:none"
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
              border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
       🚀 WebGPU: ON
     </button>
 
     <button id="stop-btn" style="display:none"
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
-             bg-red-600 hover:bg-red-700 text-white transition-colors">
+             bg-red-600 hover:bg-red-700 text-white transition-colors whitespace-nowrap">
       ⏹ Stop
     </button>
 
     <button id="clear-chat-btn" disabled
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
              border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
       Clear Chat
     </button>
 
     <button id="clear-cache-btn"
       class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-md text-[13px] font-semibold
              border border-red-900/40 text-red-500 hover:bg-red-500/10
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
       🗑 Clear Cache
     </button>
 
@@ -98,7 +109,7 @@
   <!-- ── Status bar ─────────────────────────────────────────────── -->
   <div id="status"
     class="bg-surface border-b border-bd px-4 py-1.5 text-[12.5px] text-muted min-h-[26px] flex items-center shrink-0">
-    Select a model and click <b class="font-semibold mx-1">Load Model</b> to begin.
+    Enter a HuggingFace model ID and click <b class="font-semibold mx-1">Detect</b> to find GGUF files.
   </div>
 
   <!-- ── Chat pane ──────────────────────────────────────────────── -->
@@ -110,8 +121,8 @@
       </svg>
       <h2 class="text-[15px] font-semibold">No model loaded</h2>
       <p class="text-[12.5px] max-w-sm leading-relaxed">
-        Pick a model and click <b>Load Model</b>.<br>
-        Models are cached in OPFS after the first download.
+        Paste a HuggingFace model ID like <code class="bg-surface2 px-2 py-1 rounded text-violet-300">meta-llama/Llama-2-7b-hf</code><br>
+        The app will auto-detect GGUF files and let you choose one to load.
       </p>
     </div>
   </main>
