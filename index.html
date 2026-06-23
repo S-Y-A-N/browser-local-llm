@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,200 +9,384 @@
     tailwind.config = {
       theme: {
         extend: {
-          colors: {
-            surface: '#161b22',
-            surface2: '#21262d',
-            bd: '#30363d',
-            muted: '#8b949e',
-          },
           animation: { blink: 'blink 0.8s step-end infinite' },
-          keyframes: { blink: { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } } },
+          keyframes:  { blink: { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } } },
         }
       }
     }
   </script>
   <style>
-    ::-webkit-scrollbar {
-      width: 5px;
+    /* ── Theme tokens ──────────────────────────────────────────────── */
+    :root, [data-theme="dark"] {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface2:    #21262d;
+      --bd:          #30363d;
+      --text:        #e6edf3;
+      --muted:       #8b949e;
+      --user-bubble: #0d2d5e;
+      --user-border: #1d4ed8;
+      --input-bg:    #0d1117;
+      --scrollbar:   #30363d;
+      --overlay:     rgba(0,0,0,0.55);
+    }
+    [data-theme="light"] {
+      --bg:          #f6f8fa;
+      --surface:     #ffffff;
+      --surface2:    #eaeef2;
+      --bd:          #d0d7de;
+      --text:        #1f2328;
+      --muted:       #57606a;
+      --user-bubble: #dbeafe;
+      --user-border: #93c5fd;
+      --input-bg:    #ffffff;
+      --scrollbar:   #d0d7de;
+      --overlay:     rgba(0,0,0,0.35);
     }
 
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
+    /* ── Base ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body        { background: var(--bg); color: var(--text); }
+    ::selection { background: #7c3aed44; }
 
-    ::-webkit-scrollbar-thumb {
-      background: #30363d;
-      border-radius: 4px;
-    }
+    ::-webkit-scrollbar       { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
 
+    /* ── Theming helpers ───────────────────────────────────────────── */
+    .t-surface   { background: var(--surface); }
+    .t-surface2  { background: var(--surface2); }
+    .t-bd        { border-color: var(--bd); }
+    .t-text      { color: var(--text); }
+    .t-muted     { color: var(--muted); }
+    .t-input     { background: var(--input-bg); color: var(--text); border-color: var(--bd); }
+    .t-input:focus { border-color: #7c3aed; outline: none; }
+    .t-input:disabled { opacity: 0.4; }
+    .t-hover:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── Blinking cursor ───────────────────────────────────────────── */
     .cursor {
       display: inline-block;
-      width: 7px;
-      height: 13px;
+      width: 7px; height: 13px;
       background: #7c3aed;
       border-radius: 2px;
       vertical-align: text-bottom;
       animation: blink 0.8s step-end infinite;
     }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-    @keyframes blink {
+    /* ── Status bar bold spacing ───────────────────────────────────── */
+    #status b { margin-inline: 0.2em; }
 
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: 0
-      }
+    /* ── Think block ───────────────────────────────────────────────── */
+    .think-block {
+      display: block;
+      background: var(--surface2);
+      border-left: 2px solid var(--bd);
+      border-radius: 0 6px 6px 0;
+      padding: 6px 12px;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-style: italic;
+      white-space: pre-wrap;
     }
 
-    #status b {
-      margin-inline: 0.2em;
+    /* ── Chat bubbles ──────────────────────────────────────────────── */
+    .bubble-user {
+      background: var(--user-bubble);
+      border-color: var(--user-border);
     }
+    .bubble-ai {
+      background: var(--surface);
+      border-color: var(--bd);
+    }
+    .avatar-user { background: #7c3aed; color: #fff; }
+    .avatar-ai   { background: var(--surface2); color: var(--muted); border: 1px solid var(--bd); }
+
+    /* ── Sidebar ───────────────────────────────────────────────────── */
+    #sidebar {
+      width: 224px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--bd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform 0.22s ease, width 0.22s ease;
+    }
+    #sidebar.collapsed { width: 0; border-right: none; }
+
+    /* Mobile: full overlay */
+    @media (max-width: 639px) {
+      #sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        z-index: 50;
+        width: min(80vw, 280px) !important;
+        transform: translateX(-110%);
+        transition: transform 0.22s ease;
+        border-right: 1px solid var(--bd) !important;
+      }
+      #sidebar.open  { transform: translateX(0); }
+      #sidebar-overlay { display: none; }
+      #sidebar.open + #sidebar-overlay { display: block; }
+    }
+    @media (min-width: 640px) {
+      #sidebar-overlay { display: none !important; }
+    }
+
+    #sidebar-overlay {
+      position: fixed; inset: 0; z-index: 40;
+      background: var(--overlay);
+    }
+
+    /* ── Chat list items ───────────────────────────────────────────── */
+    .chat-item       { background: transparent; }
+    .chat-item:hover { background: var(--surface2); }
+    .chat-item.active {
+      background: var(--surface2);
+      box-shadow: inset 2px 0 0 #7c3aed;
+    }
+
+    /* ── Toolbar inputs & buttons — unified height ─────────────────── */
+    .tb-control {
+      height: 30px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: 1px solid var(--bd);
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .tb-input {
+      background: var(--input-bg);
+      color: var(--text);
+      padding: 0 12px;
+      flex: 1;
+      min-width: 0;
+    }
+    .tb-input::placeholder { color: var(--muted); }
+    .tb-input:focus { outline: none; border-color: #7c3aed; }
+    .tb-input:disabled { opacity: 0.4; }
+    .tb-select {
+      background: var(--input-bg);
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+      appearance: none;
+      flex: 1;
+      min-width: 0;
+    }
+    .tb-select:focus { outline: none; border-color: #7c3aed; }
+    .tb-select:disabled { opacity: 0.4; }
+    .tb-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+      color: var(--muted);
+    }
+    .tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .tb-btn:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+    .tb-btn-primary {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #fff !important;
+    }
+    .tb-btn-primary:hover:not(:disabled) { background: #6d28d9; border-color: #5b21b6; }
+    .tb-btn-danger  { border-color: rgba(239,68,68,0.3); color: #ef4444 !important; }
+    .tb-btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.1); border-color: #ef4444; }
+
+    /* icon-only square button */
+    .tb-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0;
+      border-radius: 6px; border: 1px solid var(--bd);
+      color: var(--muted); flex-shrink: 0;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .tb-icon:hover { color: var(--text); border-color: var(--muted); }
+    .tb-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Footer textarea ───────────────────────────────────────────── */
+    #user-input {
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1px solid var(--bd);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13.5px;
+      line-height: 1.4;
+      resize: none;
+      min-height: 38px;
+      max-height: 144px;
+      overflow-y: auto;
+      transition: border-color 0.15s;
+      flex: 1;
+    }
+    #user-input::placeholder { color: var(--muted); }
+    #user-input:focus { outline: none; border-color: #7c3aed; }
+    #user-input:disabled { opacity: 0.45; }
+
+    /* ── Misc structural ───────────────────────────────────────────── */
+    header, footer, #status, #sidebar { transition: background 0.2s, border-color 0.2s; }
   </style>
 </head>
-
-<body class="bg-[#0d1117] text-[#e6edf3] flex flex-col h-dvh overflow-hidden text-sm font-sans">
+<body class="flex flex-col h-dvh overflow-hidden text-sm font-sans">
 
   <!-- ── Toolbar ────────────────────────────────────────────────── -->
-  <header class="bg-surface border-b border-bd px-4 py-2.5 flex items-center gap-2.5 flex-wrap shrink-0">
+  <header class="t-surface t-bd border-b px-3 py-2 flex flex-wrap items-center gap-2 shrink-0">
 
-    <!-- Sidebar toggle -->
-    <button id="sidebar-toggle" class="inline-flex items-center justify-center w-7 h-7 rounded-md border border-bd text-muted
-             hover:text-[#e6edf3] hover:border-muted transition-colors shrink-0" title="Toggle chat history">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
-    </button>
+    <!-- Row 1 always: toggle + title + theme + (sm+: right buttons) -->
+    <div class="flex items-center gap-2 w-full sm:w-auto">
 
-    <span class="font-bold text-[15px] mr-auto whitespace-nowrap">
-      🦙 <span class="text-violet-500">wllama</span> · GGUF Chat
-    </span>
-
-    <div class="flex gap-1 items-center">
-      <input id="model-repo-input" type="text" placeholder="HuggingFace model ID (e.g., meta-llama/Llama-2-7b-hf)"
-        class="bg-[#0d1117] text-[#e6edf3] border border-bd rounded-md px-3 h-[30px] text-[13px]
-             focus:outline-none focus:border-violet-500 min-w-[300px]
-             disabled:opacity-40" />
-
-      <button id="detect-btn" class="px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-             bg-violet-600 hover:bg-violet-700 border border-violet-800 text-white
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-        🔍 Detect
+      <button id="sidebar-toggle" class="tb-icon" title="Toggle history">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
       </button>
+
+      <span class="font-bold text-[15px] whitespace-nowrap" style="color:var(--text)">
+        🦙 <span style="color:#7c3aed">wllama</span>
+      </span>
+
+      <!-- Theme toggle -->
+      <button id="theme-btn" class="tb-icon ml-1" title="Toggle light/dark">
+        <svg id="theme-icon-dark" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="theme-icon-light" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="display:none">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+
+      <!-- Spacer pushes right-side buttons to end on mobile row 1 -->
+      <span class="flex-1 sm:hidden"></span>
+
+      <!-- Right-side: visible on sm+, hidden on mobile (shown in row 2 on mobile) -->
+      <div class="hidden sm:flex items-center gap-2">
+        <button id="gpu-btn" style="display:none" class="tb-control tb-btn">🚀 WebGPU: ON</button>
+        <button id="stop-btn" style="display:none"
+          class="tb-control tb-btn" style="background:#dc2626;border-color:#b91c1c;color:#fff">
+          ⏹ Stop
+        </button>
+        <button id="clear-chat-btn" disabled class="tb-control tb-btn">New Chat</button>
+        <button id="clear-cache-btn" class="tb-control tb-btn tb-btn-danger">🗑 Cache</button>
+      </div>
     </div>
 
-    <div id="model-select-wrap" class="flex gap-2 items-center">
-      <select id="model-select" class="bg-[#0d1117] text-[#e6edf3] border border-bd rounded-md px-3 h-[30px] text-[13px]
-               focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-40
-               appearance-none">
-      </select>
-
-      <button id="load-btn" class="px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-               bg-violet-600 hover:bg-violet-700 border border-violet-800 text-white
-               disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-        Load Model
-      </button>
+    <!-- Row 2: model repo input + detect -->
+    <div class="flex items-center gap-2 w-full sm:flex-1 sm:min-w-0">
+      <input id="model-repo-input" type="text" placeholder="HuggingFace model ID…"
+        class="tb-control tb-input" />
+      <button id="detect-btn" class="tb-control tb-btn tb-btn-primary">🔍 Detect</button>
     </div>
 
-    <!-- WebGPU toggle — shown by JS only when supported -->
-    <button id="gpu-btn" style="display:none" class="inline-flex items-center gap-1.5 px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-             border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-      🚀 WebGPU: ON
-    </button>
+    <!-- Row 3: model select + load (shown after detect) -->
+    <div id="model-select-wrap" style="display:none"
+      class="flex items-center gap-2 w-full sm:w-auto">
+      <select id="model-select" class="tb-control tb-select"></select>
+      <button id="load-btn" class="tb-control tb-btn tb-btn-primary">Load Model</button>
+    </div>
 
-    <button id="stop-btn" style="display:none" class="inline-flex items-center gap-1.5 px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-             bg-red-600 hover:bg-red-700 text-white transition-colors whitespace-nowrap">
-      ⏹ Stop
-    </button>
-
-    <button id="clear-chat-btn" disabled class="inline-flex items-center gap-1.5 px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-             border border-bd text-muted hover:text-[#e6edf3] hover:border-muted
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-      New Chat
-    </button>
-
-    <button id="clear-cache-btn" class="inline-flex items-center gap-1.5 px-3.5 h-[30px] rounded-md text-[13px] font-semibold
-             border border-red-900/40 text-red-500 hover:bg-red-500/10
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-      🗑 Clear Cache
-    </button>
+    <!-- Mobile-only row: gpu + stop + new chat + clear cache -->
+    <div class="flex sm:hidden items-center gap-2 w-full">
+      <button id="gpu-btn-m" style="display:none" class="tb-control tb-btn text-[12px]">🚀 WebGPU</button>
+      <button id="stop-btn-m" style="display:none"
+        class="tb-control tb-btn" style="background:#dc2626;border-color:#b91c1c;color:#fff;font-size:12px">
+        ⏹ Stop
+      </button>
+      <span class="flex-1"></span>
+      <button id="clear-chat-btn-m" disabled class="tb-control tb-btn text-[12px]">New Chat</button>
+      <button id="clear-cache-btn-m" class="tb-control tb-btn tb-btn-danger text-[12px]">🗑 Cache</button>
+    </div>
 
   </header>
 
   <!-- ── Progress bar ───────────────────────────────────────────── -->
-  <div id="prog-wrap" class="h-0.5 bg-bd hidden shrink-0">
-    <div id="prog-bar" class="h-full bg-violet-500 transition-[width] duration-200 w-0"></div>
+  <div id="prog-wrap" class="h-0.5 hidden shrink-0" style="background:var(--bd)">
+    <div id="prog-bar" class="h-full transition-[width] duration-200 w-0" style="background:#7c3aed"></div>
   </div>
 
   <!-- ── Status bar ─────────────────────────────────────────────── -->
   <div id="status"
-    class="bg-surface border-b border-bd px-4 py-1.5 text-[12.5px] text-muted min-h-[26px] flex items-center shrink-0">
-    Enter a HuggingFace model ID and click <b class="font-semibold mx-1">Detect</b> to find GGUF files.
+    class="t-surface t-bd border-b px-4 py-1.5 text-[12.5px] min-h-[26px] flex items-center shrink-0 overflow-x-auto whitespace-nowrap"
+    style="color:var(--muted)">
+    Enter a HuggingFace model ID and click <b class="font-semibold">Detect</b> to find GGUF files.
   </div>
 
-  <!-- ── Body (sidebar + chat) ──────────────────────────────────── -->
-  <div class="flex flex-1 overflow-hidden">
+  <!-- ── Body ───────────────────────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- Mobile overlay -->
+    <div id="sidebar-overlay"
+      onclick="document.getElementById('sidebar').classList.remove('open')"></div>
 
     <!-- ── Sidebar ──────────────────────────────────────────────── -->
-    <aside id="sidebar"
-      class="w-56 shrink-0 bg-surface border-r border-bd flex flex-col overflow-hidden transition-all duration-200">
-      <div class="px-3 py-2.5 flex items-center justify-between border-b border-bd shrink-0">
-        <span class="text-[12px] font-semibold text-muted uppercase tracking-wider">Saved Chats</span>
-        <button id="new-chat-btn" class="text-[11px] px-2 py-0.5 rounded border border-bd text-muted hover:text-[#e6edf3]
-                 hover:border-muted transition-colors whitespace-nowrap">
+    <aside id="sidebar">
+      <div class="px-3 py-2.5 flex items-center justify-between shrink-0"
+        style="border-bottom:1px solid var(--bd)">
+        <span class="text-[12px] font-semibold uppercase tracking-wider" style="color:var(--muted)">
+          Saved Chats
+        </span>
+        <button id="new-chat-btn"
+          class="text-[11px] px-2 py-0.5 rounded t-hover transition-colors whitespace-nowrap"
+          style="border:1px solid var(--bd);color:var(--muted)">
           + New
         </button>
       </div>
-      <ul id="chat-list" class="flex-1 overflow-y-auto py-1">
-        <!-- populated by JS -->
-      </ul>
+      <ul id="chat-list" class="flex-1 overflow-y-auto py-1"></ul>
     </aside>
 
     <!-- ── Chat pane ────────────────────────────────────────────── -->
-    <main id="chat" class="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4">
-      <div id="empty" class="flex-1 flex flex-col items-center justify-center text-center text-muted gap-3 py-10">
-        <svg class="opacity-20" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <main id="chat" class="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 flex flex-col gap-4">
+      <div id="empty"
+        class="flex-1 flex flex-col items-center justify-center text-center gap-3 py-10"
+        style="color:var(--muted)">
+        <svg class="opacity-20" width="46" height="46" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
-        <h2 class="text-[15px] font-semibold">No model loaded</h2>
+        <h2 class="text-[15px] font-semibold" style="color:var(--text)">No model loaded</h2>
         <p class="text-[12.5px] max-w-sm leading-relaxed">
-          Paste a HuggingFace model ID like <code
-            class="bg-surface2 px-2 py-1 rounded text-violet-300">meta-llama/Llama-2-7b-hf</code><br>
-          The app will auto-detect GGUF files and let you choose one to load.
+          Paste a HuggingFace model ID like
+          <code class="px-2 py-0.5 rounded text-[#7c3aed]" style="background:var(--surface2)">
+            meta-llama/Llama-2-7b-hf
+          </code><br>
+          then click Detect to find GGUF files.
         </p>
-        <p>Search for "GGUF" in <a href="https://huggingface.co" target="_blank"
-            class="underline text-indigo-400 hover:text-indigo-600">huggingface.co</a> to explore supported models!</p>
       </div>
     </main>
 
   </div>
 
   <!-- ── Input row ──────────────────────────────────────────────── -->
-  <footer class="border-t border-bd bg-surface px-4 py-3 flex items-end gap-2 shrink-0">
-    <textarea id="user-input" rows="1" disabled placeholder="Message… (Enter = send · Shift+Enter = newline)" class="flex-1 bg-[#0d1117] text-[#e6edf3] border border-bd rounded-lg px-3 py-2
-             text-[13.5px] leading-snug resize-none min-h-[38px] max-h-36 overflow-y-auto
-             focus:outline-none focus:border-violet-500 disabled:opacity-45
-             placeholder:text-muted transition-colors"></textarea>
-
-    <button id="send-btn" disabled title="Send (Enter)" class="w-[38px] h-[38px] shrink-0 flex items-center justify-center rounded-lg
-             bg-violet-600 hover:bg-violet-700 text-white
-             disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <line x1="22" y1="2" x2="11" y2="13" />
-        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+  <footer class="t-surface t-bd border-t px-3 py-2.5 flex items-end gap-2 shrink-0">
+    <textarea id="user-input" rows="1" disabled placeholder="Message…"></textarea>
+    <button id="send-btn" disabled title="Send (Enter)"
+      class="w-[38px] h-[38px] shrink-0 flex items-center justify-center rounded-lg
+             transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style="background:#7c3aed;color:#fff">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
       </svg>
     </button>
   </footer>
 
   <script type="module" src="app.js"></script>
 </body>
-
 </html>
